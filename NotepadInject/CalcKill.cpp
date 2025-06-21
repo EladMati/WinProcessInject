@@ -37,7 +37,7 @@ void CalcKill::killAll()
                     char szProcessName[MAX_PATH] = "";
                     GetModuleBaseNameA(hProcess, hMod, szProcessName, sizeof(szProcessName) / sizeof(char));
                     // Check if the process name is "calc.exe"
-                    if (_stricmp(szProcessName, "calc.exe") == 0) 
+                    if (_stricmp(szProcessName, "CalculatorApp.exe") == 0) 
                     {
                         std::cout << "Killing calc.exe PID: " << processes[i] << std::endl;
                         TerminateProcess(hProcess, 1);
