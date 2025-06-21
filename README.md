@@ -8,6 +8,9 @@ How it was tested:
 1)  Several notepad processess were opened before runing the program. Each time diffrent number of them. Several notepad files were opned while program is running
 2) Meanwhile several calculaor procceses were opened before runing the program. Each time diffrent number of them. Several notepad files were opned while program is running
 Considerations and limitations:
+1) Was taested for only few pcoesseses of calculator and of notepad
+2) Was tested for short periods (several minutes)- Can be run for much lom=nger
+Known issues:
 1) The log file is appending each time
 2) The time for checking new new processes is hardcodeded to 300 ms
-3) for the calculator processes the process name to compare was "CalculatorApp.exe" even though it can be diff is some os( for example "calc.exe") - Not eanouth robust
+4) for the calculator processes the process name to compare was "CalculatorApp.exe" even though it can be diff is some os( for example "calc.exe") - Not eanouth robust
