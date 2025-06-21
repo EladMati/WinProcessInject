@@ -27,4 +27,4 @@ Future Improvments:
 1) Ajust more precisely the interaction time (the rest time) of each thread form 300 ms - to be more balanced: between CPU consumption to faster detection time of new calculator and notepad processes.
 2) "**CalculatorApp.exe**" - Make the detaction of calculator processes more robust and suitable to all permutations of OS of desired windows. Also need to check equivalnt of of "notepad.exe".
 3) Make the theads listen to the creation of new processes ( As equivalent to netlink syscall in linux) instead of pulling all possibles runnig pids in the systems each time.
-4) Path of the dll, the time for checking new processes, both can be accepted as argument to the rogram
+4) Path of the dll, the time for checking new processes, both can be accepted as argument to the program.
