@@ -3,8 +3,9 @@ Inject dll to notepad processes. Also kill all calculator processes - Do it cont
 
 How to run the project:
 1) Create folder "C:\Temp" and put inside it the dll "TotallyNotAVirus.dll"
-2) a. Download WinProcessInject.exe and run it as administrator
-2) b. Or Download the whole solution zip. Unzip it and open it in Visual studio (2022). Run it a s Release x64 (with c++ 17 defenitions). Also run as andministrator
+2) Make sure that the antivirus is off!!
+3) a. Download WinProcessInject.exe and run it as administrator
+2) b. Or Download the whole solution zip. Unzip it. Run Visual studio (2022) as administrator! load the solution (sln file) .Run it a s Release x64 (with c++ 17 defenitions). 
    
 How it was tested:
 1) Several notepad processess were opened before runing the program. Each time diffrent number of them. Several notepad files were opened while program is running.
