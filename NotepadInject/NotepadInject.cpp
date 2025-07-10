@@ -10,137 +10,164 @@ namespace {
     constexpr const char* NOTEPAD_EXE = "notepad.exe";
 }
 
-NotepadInject::NotepadInject(const std::wstring& dllPath, const std::wstring& logPath)
+NotepadInject::NotepadInject(const std::wstring& dllPath,
+    const std::wstring& logPath,
+    std::chrono::milliseconds sleepMs)
     : m_dllPath(dllPath)
+    , m_logger(nullptr)
     , m_run(true)
+    , m_sleepMs(sleepMs)
+    , m_hInjectProcess(nullptr)
+    , m_hInjectThread(nullptr)
+    , m_hKernel32(nullptr)
+    , m_remoteString(nullptr)
 {
-    try 
+    try
     {
         m_logger = std::make_unique<Logger>(logPath);
-    } 
-    catch (const std::exception& ex) 
+    }
+    catch (const std::exception&)
     {
-        m_logger = nullptr;
         throw std::runtime_error("Logger initialization failed");
     }
 }
 
-bool NotepadInject::injectDLL(DWORD processId, const std::wstring& dllPath)
+NotepadInject::~NotepadInject()
 {
-    if (!std::filesystem::exists(dllPath)) 
+    if (m_hInjectThread)
     {
-        throw std::runtime_error("DLL path does not exist: " + std::string(dllPath.begin(), dllPath.end()));
-    }
-    HANDLE hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
-        PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, processId);
-    if (!hProcess) 
-    {
-        throw std::runtime_error("Failed to open process: " + std::to_string(processId) + " Error: " + std::to_string(GetLastError()));
+        CloseHandle(m_hInjectThread);
+        m_hInjectThread = nullptr;
     }
 
-    // Allocate memory in the target process for the DLL path
-    size_t pathSize = (dllPath.length() + 1) * sizeof(wchar_t);
-    LPVOID remoteString = VirtualAllocEx(hProcess, nullptr, pathSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!remoteString) 
+    if (m_hInjectProcess)
     {
-        CloseHandle(hProcess);
-        return false;
+        CloseHandle(m_hInjectProcess);
+        m_hInjectProcess = nullptr;
     }
 
-    // Write the DLL path to the allocated memory
-    if (!WriteProcessMemory(hProcess, remoteString, dllPath.c_str(), pathSize, nullptr)) 
+    if (m_remoteString && m_hInjectProcess)
     {
-        VirtualFreeEx(hProcess, remoteString, 0, MEM_RELEASE);
-        CloseHandle(hProcess);
-        return false;
+        VirtualFreeEx(m_hInjectProcess, m_remoteString, 0, MEM_RELEASE);
+        m_remoteString = nullptr;
     }
-
-    HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!hKernel32)
-    {
-        VirtualFreeEx(hProcess, remoteString, 0, MEM_RELEASE);
-        CloseHandle(hProcess);
-        return false;
-    }
-    // Create a remote thread in the target process to load the DLL
-    LPTHREAD_START_ROUTINE loadLibraryAddr = (LPTHREAD_START_ROUTINE)GetProcAddress(hKernel32, "LoadLibraryW");
-    HANDLE hThread = CreateRemoteThread(hProcess, nullptr, 0, loadLibraryAddr, remoteString, 0, nullptr);
-    if (hThread) 
-    {
-        WaitForSingleObject(hThread, INFINITE);
-        CloseHandle(hThread);
-    }
-
-    VirtualFreeEx(hProcess, remoteString, 0, MEM_RELEASE);
-    CloseHandle(hProcess);
-    return hThread != nullptr;
 }
 
-void NotepadInject::stop() 
+void NotepadInject::injectAll()
+{
+    std::unordered_set<DWORD> injectedPIDs;
+
+    while (m_run)
+    {
+        try
+        {
+            SearchInAllProcesses(NOTEPAD_EXE);
+        }
+        catch (const std::runtime_error& e)
+        {
+            std::cerr << "Runtime error: " << e.what() << std::endl;
+        }
+
+        std::this_thread::sleep_for(m_sleepMs);
+    }
+}
+
+void NotepadInject::OnProcessFound(DWORD processId, HANDLE hProcess, const std::string& processName)
+{
+    if (m_logger)
+    {
+        m_logger->write(processId);
+    }
+
+    if (!injectDLL(processId, m_dllPath))
+    {
+        throw std::runtime_error("DLL injection failed for process: " + std::to_string(processId));
+    }
+}
+
+void NotepadInject::stop()
 {
     m_run = false;
 }
 
-void NotepadInject::injectAll() 
+bool NotepadInject::injectDLL(DWORD processId, const std::wstring& dllPath)
 {
-    std::unordered_set<DWORD> injectedPIDs;
-    while (m_run) 
+    if (!std::filesystem::exists(dllPath))
     {
-        DWORD processes[1024];
-        DWORD needed;
-        DWORD count;
-        if (!EnumProcesses(processes, sizeof(processes), &needed)) 
-        {
-            std::cerr << "Failed to enumerate processes." << std::endl;
-            return;
-        }
-        count = needed / sizeof(DWORD);
-        for (unsigned int i = 0; i < count; ++i) 
-        {
-            if (processes[i] == 0) continue;
-            HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processes[i]);
-            if (hProcess) 
-            {
-                HMODULE hMod;
-                DWORD cbNeeded;
-                if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded)) 
-                {
-                    char szProcessName[MAX_PATH] = "";
-                    GetModuleBaseNameA(hProcess, hMod, szProcessName, sizeof(szProcessName) / sizeof(char));
-                    //find all processes with notepad.exe name
-                    if (_stricmp(szProcessName, NOTEPAD_EXE) == 0) 
-                    {
-                        //if a process is already injected, skip it
-                        if (injectedPIDs.count(processes[i])) 
-                        {
-                            CloseHandle(hProcess);
-                            continue;
-                        }
-                        injectedPIDs.insert(processes[i]);
-                        if (std::filesystem::exists(m_dllPath)) 
-                        {
-                            if (injectDLL(processes[i], m_dllPath)) 
-                            {
-                                std::wcout << L"Successfully injected into PID: " << processes[i] << std::endl;
-                                if (m_logger) m_logger->write(processes[i]);
-                            } 
-                            else 
-                            {
-                                std::wcout << L"Failed to inject into PID: " << processes[i] << std::endl;
-                            }
-                        } 
-                        else 
-                        {
-                            throw std::runtime_error("DLL path does not exist: " + std::string(m_dllPath.begin(), m_dllPath.end()));
-                        }
-                    }
-                }
-
-                CloseHandle(hProcess);
-            }
-        }
-
-        //Long time of 400 milliseconds since related tu user interaction
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        throw std::runtime_error("DLL path does not exist: " + std::string(dllPath.begin(), dllPath.end()));
     }
+
+    if (m_hInjectThread)
+    {
+        CloseHandle(m_hInjectThread);
+        m_hInjectThread = nullptr;
+    }
+
+    if (m_hInjectProcess)
+    {
+        CloseHandle(m_hInjectProcess);
+        m_hInjectProcess = nullptr;
+    }
+
+    if (m_remoteString && m_hInjectProcess)
+    {
+        VirtualFreeEx(m_hInjectProcess, m_remoteString, 0, MEM_RELEASE);
+        m_remoteString = nullptr;
+    }
+
+    m_hInjectProcess = OpenProcess(
+        PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
+        PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
+        FALSE, processId);
+
+    if (!m_hInjectProcess)
+    {
+        throw std::runtime_error("Failed to open process: " + std::to_string(processId) +
+            " Error: " + std::to_string(GetLastError()));
+    }
+
+    size_t pathSize = (dllPath.length() + 1) * sizeof(wchar_t);
+    m_remoteString = VirtualAllocEx(m_hInjectProcess, nullptr, pathSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!m_remoteString)
+    {
+        CloseHandle(m_hInjectProcess);
+        m_hInjectProcess = nullptr;
+        return false;
+    }
+
+    if (!WriteProcessMemory(m_hInjectProcess, m_remoteString, dllPath.c_str(), pathSize, nullptr))
+    {
+        VirtualFreeEx(m_hInjectProcess, m_remoteString, 0, MEM_RELEASE);
+        m_remoteString = nullptr;
+        CloseHandle(m_hInjectProcess);
+        m_hInjectProcess = nullptr;
+        return false;
+    }
+
+    m_hKernel32 = GetModuleHandleW(L"kernel32.dll");
+    if (!m_hKernel32)
+    {
+        VirtualFreeEx(m_hInjectProcess, m_remoteString, 0, MEM_RELEASE);
+        m_remoteString = nullptr;
+        CloseHandle(m_hInjectProcess);
+        m_hInjectProcess = nullptr;
+        return false;
+    }
+
+    auto loadLibraryAddr = (LPTHREAD_START_ROUTINE)GetProcAddress(m_hKernel32, "LoadLibraryW");
+    m_hInjectThread = CreateRemoteThread(m_hInjectProcess, nullptr, 0, loadLibraryAddr, m_remoteString, 0, nullptr);
+
+    if (m_hInjectThread)
+    {
+        WaitForSingleObject(m_hInjectThread, INFINITE);
+        CloseHandle(m_hInjectThread);
+        m_hInjectThread = nullptr;
+    }
+
+    VirtualFreeEx(m_hInjectProcess, m_remoteString, 0, MEM_RELEASE);
+    m_remoteString = nullptr;
+    CloseHandle(m_hInjectProcess);
+    m_hInjectProcess = nullptr;
+
+    return m_hInjectThread != nullptr;
 }

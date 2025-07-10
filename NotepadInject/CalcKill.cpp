@@ -4,56 +4,34 @@
 #include <iostream>
 #include <thread>
 
-CalcKill::CalcKill() 
-    : m_run(true) 
-{}
-
-void CalcKill::killAll() 
+CalcKill::CalcKill(std::chrono::milliseconds sleepMs)
+    : m_run(true), m_sleepMs(sleepMs)
 {
-    while (m_run) 
+}
+
+void CalcKill::killAll()
+{
+    while (m_run)
     {
-        DWORD processes[1024], needed, count;
-        if (!EnumProcesses(processes, sizeof(processes), &needed)) 
+        try
         {
-            std::cerr << "Failed to enumerate processes." << std::endl;
-            return;
+            SearchInAllProcesses("CalculatorApp.exe");
         }
-
-        count = needed / sizeof(DWORD);
-        for (unsigned int i = 0; i < count; ++i) 
+        catch (const std::runtime_error& e)
         {
-            if (processes[i] == 0) 
-            {
-                continue;
-            }
-
-            HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processes[i]);
-            if (hProcess) 
-            {
-                HMODULE hMod;
-                DWORD cbNeeded;
-                if (EnumProcessModules(hProcess, &hMod, sizeof(hMod), &cbNeeded)) 
-                {
-                    char szProcessName[MAX_PATH] = "";
-                    GetModuleBaseNameA(hProcess, hMod, szProcessName, sizeof(szProcessName) / sizeof(char));
-                    // Check if the process name is "calc.exe"
-                    if (_stricmp(szProcessName, "CalculatorApp.exe") == 0) 
-                    {
-                        std::cout << "Killing calc.exe PID: " << processes[i] << std::endl;
-                        TerminateProcess(hProcess, 1);
-                    }
-                }
-
-                CloseHandle(hProcess);
-            }
+            std::cerr << "Runtime error: " << e.what() << std::endl;
         }
-
-        // long time of 400 milliseconds since related tu user interaction
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        std::this_thread::sleep_for(m_sleepMs);
     }
 }
 
-void CalcKill::stop() 
+void CalcKill::OnProcessFound(DWORD processId, HANDLE hProcess, const std::string& processName)
+{
+    std::cout << "Killing " << processName << " PID: " << processId << std::endl;
+    TerminateProcess(hProcess, 1);
+}
+
+void CalcKill::stop()
 {
     m_run = false;
 }

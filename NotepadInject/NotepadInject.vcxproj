@@ -134,6 +134,7 @@
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="Manager.cpp" />
     <ClCompile Include="NotepadInject.cpp" />
+    <ClCompile Include="ProcessTracker.cpp" />
     <ClCompile Include="WinProcessInject.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -141,6 +142,7 @@
     <ClInclude Include="Logger.h" />
     <ClInclude Include="Manager.h" />
     <ClInclude Include="NotepadInject.h" />
+    <ClInclude Include="ProcessTracker.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,13 +1,18 @@
 #pragma once
+
 #include <memory>
-#include "NotepadInject.h"
-#include "CalcKill.h"
+#include <string>
 #include <thread>
+#include <chrono>
+
+class NotepadInject;
+class CalcKill;
 
 class Manager {
 public:
-    explicit Manager(const std::wstring& dllPath, const std::wstring& logPath);
+    explicit Manager(const std::wstring& dllPath, const std::wstring& logPath, std::chrono::milliseconds sleepMs = std::chrono::milliseconds(300));
     ~Manager();
+
     void run();
     void stop();
 
